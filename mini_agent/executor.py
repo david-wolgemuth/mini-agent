@@ -1,6 +1,7 @@
 import contextlib
 import io
 import signal
+import subprocess
 import traceback
 from dataclasses import dataclass
 
@@ -59,3 +60,26 @@ def execute_code(code, namespace, timeout=30):
         stderr=stderr_buf.getvalue(),
         exception=exception,
     )
+
+
+def execute_bash(code, timeout=30):
+    """Execute a bash command via subprocess.
+
+    Captures stdout/stderr.
+    """
+    try:
+        result = subprocess.run(
+            ["bash", "-c", code],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return ExecutionResult(
+            stdout=result.stdout,
+            stderr=result.stderr,
+            exception=f"exit code {result.returncode}" if result.returncode != 0 else None,
+        )
+    except subprocess.TimeoutExpired:
+        return ExecutionResult(stdout="", stderr="", exception="Command timed out")
+    except Exception:
+        return ExecutionResult(stdout="", stderr="", exception=traceback.format_exc())

@@ -2,7 +2,7 @@ import argparse
 import os
 import sys
 
-from .executor import execute_code
+from .executor import execute_bash, execute_code
 from .ollama import call_ollama
 from .parser import extract_code_blocks, is_done
 from .prompts import RESULT_SUFFIX, SYSTEM_PROMPT
@@ -83,40 +83,49 @@ def main():
             if not code_blocks:
                 break
 
-            code = "\n".join(code_blocks)
+            # Execute all code blocks, collect results
+            skipped = False
+            all_parts = []
+            for block in code_blocks:
+                if args.confirm:
+                    try:
+                        answer = input(f"\nexecute {block.lang}? [y/n] ")
+                    except (EOFError, KeyboardInterrupt):
+                        print("\nskipped")
+                        skipped = True
+                        break
+                    if answer.lower() != "y":
+                        skipped = True
+                        break
 
-            if args.confirm:
-                try:
-                    answer = input("\nexecute? [y/n] ")
-                except (EOFError, KeyboardInterrupt):
-                    print("\nskipped")
-                    break
-                if answer.lower() != "y":
-                    messages.append(
-                        {"role": "user", "content": "User declined to execute the code."}
-                    )
-                    continue
+                if block.lang == "bash":
+                    result = execute_bash(block.code)
+                else:
+                    result = execute_code(block.code, namespace)
 
-            result = execute_code(code, namespace)
+                if result.stdout:
+                    all_parts.append(f"stdout:\n{result.stdout}")
+                if result.stderr:
+                    all_parts.append(f"stderr:\n{result.stderr}")
+                if result.exception:
+                    all_parts.append(f"error:\n{result.exception}")
 
-            # Build feedback message
-            parts = []
-            if result.stdout:
-                parts.append(f"stdout:\n{result.stdout}")
-            if result.stderr:
-                parts.append(f"stderr:\n{result.stderr}")
-            if result.exception:
-                parts.append(f"error:\n{result.exception}")
-            if not parts:
-                parts.append("(no output)")
+            if skipped:
+                messages.append(
+                    {"role": "user", "content": "User declined to execute the code."}
+                )
+                continue
 
-            feedback = "\n".join(parts)
+            if not all_parts:
+                all_parts.append("(no output)")
+
+            feedback = "\n".join(all_parts)
             print(f"\n[exec] {feedback}")
 
             messages.append({"role": "user", "content": f"Execution result:\n{feedback}{RESULT_SUFFIX}"})
 
             # If nothing happened at all, don't auto-continue
-            if not result.stdout and not result.stderr and not result.exception:
+            if all_parts == ["(no output)"]:
                 break
 
             # Auto-continue so model sees the result (or error) and can react
