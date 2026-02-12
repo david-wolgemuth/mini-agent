@@ -1,10 +1,11 @@
 import argparse
+import os
 import sys
 
 from .executor import execute_code
 from .ollama import call_ollama
 from .parser import extract_code_blocks, is_done
-from .prompts import SYSTEM_PROMPT
+from .prompts import RESULT_SUFFIX, SYSTEM_PROMPT
 
 MAX_AUTO_TURNS = 5
 
@@ -35,7 +36,7 @@ def main():
     parser.add_argument("prompt", nargs="*", help="Initial prompt (or omit for interactive mode)")
     args = parser.parse_args()
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": SYSTEM_PROMPT.format(cwd=os.getcwd())}]
     namespace = {"__builtins__": __builtins__}
 
     initial_prompt = " ".join(args.prompt) if args.prompt else None
@@ -112,7 +113,7 @@ def main():
             feedback = "\n".join(parts)
             print(f"\n[exec] {feedback}")
 
-            messages.append({"role": "user", "content": f"Execution result:\n{feedback}"})
+            messages.append({"role": "user", "content": f"Execution result:\n{feedback}{RESULT_SUFFIX}"})
 
             # If nothing happened at all, don't auto-continue
             if not result.stdout and not result.stderr and not result.exception:
