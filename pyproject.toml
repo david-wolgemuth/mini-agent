@@ -1,0 +1,9 @@
+[project]
+name = "mini-agent"
+version = "0.1.0"
+description = "A minimal Python coding agent powered by local LLMs via Ollama"
+requires-python = ">=3.12"
+dependencies = ["requests"]
+
+[project.scripts]
+mini-agent = "mini_agent.cli:main"
