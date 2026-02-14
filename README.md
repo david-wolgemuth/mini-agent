@@ -4,7 +4,7 @@ A minimal coding agent powered by local LLMs via [Ollama](https://ollama.com). D
 
 ## Setup
 
-```
+```sh
 uv sync
 ```
 
@@ -12,7 +12,7 @@ Requires [Ollama](https://ollama.com) running locally with a model pulled (defau
 
 ## Usage
 
-```
+```sh
 mini-agent                        # interactive mode
 mini-agent "list all python files" # one-shot prompt
 mini-agent --python "read config"  # prefer python over bash
@@ -22,7 +22,7 @@ mini-agent --confirm "rm *.log"    # ask before each execution
 
 ## Example Session
 
-````sh
+````md
 $ uv run mini-agent 'explore the codebase'
 mini-agent (qwen2.5-coder:3b)
 ctrl-c to interrupt, ctrl-d to quit
