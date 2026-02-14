@@ -1,6 +1,6 @@
 # mini-agent
 
-A minimal coding agent powered by local LLMs via [Ollama](https://ollama.com). Runs bash or Python in a loop — the model writes code, it gets executed, the model sees the result, and keeps going until done.
+A minimal coding agent powered by local LLMs via [Ollama](https://ollama.com). Designed to work with tiny models (3B parameters and up) — the model writes code, it gets executed, the model sees the result, and keeps going until done.
 
 ## Setup
 
@@ -22,7 +22,7 @@ mini-agent --confirm "rm *.log"    # ask before each execution
 
 ## Example Session
 
-````
+````sh
 $ uv run mini-agent 'explore the codebase'
 mini-agent (qwen2.5-coder:3b)
 ctrl-c to interrupt, ctrl-d to quit
