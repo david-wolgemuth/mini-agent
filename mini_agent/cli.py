@@ -5,9 +5,9 @@ import sys
 from .executor import execute_bash, execute_code
 from .ollama import call_ollama
 from .parser import extract_code_blocks, is_done
-from .prompts import RESULT_SUFFIX, SYSTEM_PROMPT
+from .prompts import result_suffix, build_system_prompt
 
-MAX_AUTO_TURNS = 5
+MAX_AUTO_TURNS = 20
 
 
 def _truncate_history(messages, max_chars=12000):
@@ -28,21 +28,27 @@ def _truncate_history(messages, max_chars=12000):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Mini Agent — local Python coding agent")
+    parser = argparse.ArgumentParser(description="Mini Agent — local coding agent")
     parser.add_argument("--model", default="qwen2.5-coder:3b", help="Ollama model name")
     parser.add_argument("--ollama-url", default="http://localhost:11434", help="Ollama base URL")
     parser.add_argument("--confirm", action="store_true", help="Ask before executing code")
     parser.add_argument("--no-stream", action="store_true", help="Disable streaming output")
+    lang_group = parser.add_mutually_exclusive_group()
+    lang_group.add_argument("--bash", action="store_const", const="bash", dest="lang", help="Use bash by default (default)")
+    lang_group.add_argument("--python", action="store_const", const="python", dest="lang", help="Use python by default")
+    parser.set_defaults(lang="bash")
     parser.add_argument("prompt", nargs="*", help="Initial prompt (or omit for interactive mode)")
     args = parser.parse_args()
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT.format(cwd=os.getcwd())}]
+    messages = [{"role": "system", "content": build_system_prompt(os.getcwd(), args.lang)}]
     namespace = {"__builtins__": __builtins__}
 
     initial_prompt = " ".join(args.prompt) if args.prompt else None
 
     print(f"mini-agent ({args.model})")
     print("ctrl-c to interrupt, ctrl-d to quit\n")
+
+    waiting_for_quit = False
 
     while True:
         # Get user input
@@ -53,7 +59,15 @@ def main():
         else:
             try:
                 user_input = input(">>> ")
-            except (EOFError, KeyboardInterrupt):
+                waiting_for_quit = False
+            except KeyboardInterrupt:
+                if waiting_for_quit:
+                    print("\nbye")
+                    break
+                print("\nctrl-c again to quit")
+                waiting_for_quit = True
+                continue
+            except EOFError:
                 print("\nbye")
                 break
 
@@ -61,6 +75,7 @@ def main():
             continue
 
         messages.append({"role": "user", "content": user_input})
+        current_request = user_input
 
         # Agent loop: model responds, we execute, model reacts
         for turn in range(MAX_AUTO_TURNS):
@@ -70,6 +85,9 @@ def main():
                 response = call_ollama(
                     messages, args.model, args.ollama_url, stream=not args.no_stream
                 )
+            except KeyboardInterrupt:
+                print("\n[interrupted]")
+                break
             except Exception as e:
                 print(f"\n[ollama error: {e}]")
                 break
@@ -81,10 +99,15 @@ def main():
 
             code_blocks = extract_code_blocks(response)
             if not code_blocks:
-                break
+                # Model responded with text instead of code — nudge it back
+                messages.append(
+                    {"role": "user", "content": result_suffix(current_request)}
+                )
+                continue
 
             # Execute all code blocks, collect results
             skipped = False
+            interrupted = False
             all_parts = []
             for block in code_blocks:
                 if args.confirm:
@@ -98,10 +121,15 @@ def main():
                         skipped = True
                         break
 
-                if block.lang == "bash":
-                    result = execute_bash(block.code)
-                else:
-                    result = execute_code(block.code, namespace)
+                try:
+                    if block.lang == "bash":
+                        result = execute_bash(block.code)
+                    else:
+                        result = execute_code(block.code, namespace)
+                except KeyboardInterrupt:
+                    print("\n[interrupted]")
+                    interrupted = True
+                    break
 
                 if result.stdout:
                     all_parts.append(f"stdout:\n{result.stdout}")
@@ -109,6 +137,9 @@ def main():
                     all_parts.append(f"stderr:\n{result.stderr}")
                 if result.exception:
                     all_parts.append(f"error:\n{result.exception}")
+
+            if interrupted:
+                break
 
             if skipped:
                 messages.append(
@@ -122,13 +153,7 @@ def main():
             feedback = "\n".join(all_parts)
             print(f"\n[exec] {feedback}")
 
-            messages.append({"role": "user", "content": f"Execution result:\n{feedback}{RESULT_SUFFIX}"})
-
-            # If nothing happened at all, don't auto-continue
-            if all_parts == ["(no output)"]:
-                break
-
-            # Auto-continue so model sees the result (or error) and can react
+            messages.append({"role": "user", "content": f"Execution result:\n{feedback}{result_suffix(current_request)}"})
 
         # Back to user input
 

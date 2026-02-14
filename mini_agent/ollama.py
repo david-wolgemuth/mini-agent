@@ -21,7 +21,12 @@ def call_ollama(messages, model, base_url, stream=True):
 
     if not stream:
         data = resp.json()
-        return data["message"]["content"]
+        content = data["message"]["content"]
+        sys.stdout.write(content)
+        if not content.endswith("\n"):
+            sys.stdout.write("\n")
+        sys.stdout.flush()
+        return content
 
     chunks = []
     for line in resp.iter_lines():
